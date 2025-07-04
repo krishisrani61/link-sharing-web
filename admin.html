@@ -68,22 +68,23 @@
       const tbody = document.querySelector("#linkTable tbody");
       tbody.innerHTML = "";
 
-      Object.entries(data).forEach(([code, info]) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${code}</td>
-          <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
-          <td>${info.clicks}</td>
-          <td>${new Date(info.created).toLocaleString()}</td>
-          <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
-          <td class="actions">
-            <button onclick="deleteLink('${code}')">Delete</button>
-            <button onclick="copyCode('${code}')">Copy</button>
-          </td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
+    Object.entries(data).forEach(([code, info]) => {
+      if (!info || !info.url) return; // skip invalid or deleted records
+    
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${code}</td>
+        <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
+        <td>${info.clicks}</td>
+        <td>${new Date(info.created).toLocaleString()}</td>
+        <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
+        <td class="actions">
+          <button onclick="deleteLink('${code}')">Delete</button>
+          <button onclick="copyCode('${code}')">Copy</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
 
     async function addLink() {
       const code = document.getElementById("addCode").value.trim().toUpperCase();
