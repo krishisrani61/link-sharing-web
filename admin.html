@@ -52,6 +52,7 @@
       <tbody></tbody>
     </table>
   </div>
+  <button onclick="registerYubiKey()">Register YubiKey</button>
 
   <script>
     const backendURL = 'https://link-sharing-backend.ikrish61.workers.dev';
@@ -104,6 +105,41 @@
       } catch (err) {
         console.error("Auth failed", err);
         document.getElementById('authStatus').textContent = 'Authentication failed';
+      }
+    }
+
+    async function registerYubiKey() {
+      try {
+        const res = await fetch(`${backendURL}/auth/register`, {
+          method: 'POST'
+        });
+        const options = await res.json();
+
+        options.publicKey.challenge = base64urlDecode(options.publicKey.challenge);
+        options.publicKey.user.id = base64urlDecode(options.publicKey.user.id);
+
+        const cred = await navigator.credentials.create({ publicKey: options.publicKey });
+
+        const response = {
+          id: cred.id,
+          rawId: base64urlEncode(new Uint8Array(cred.rawId)),
+          type: cred.type,
+          response: {
+            clientDataJSON: base64urlEncode(new Uint8Array(cred.response.clientDataJSON)),
+            attestationObject: base64urlEncode(new Uint8Array(cred.response.attestationObject))
+          }
+        };
+
+        const confirmRes = await fetch(`${backendURL}/auth/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(response)
+        });
+
+        alert(await confirmRes.text());
+      } catch (err) {
+        console.error("Registration failed", err);
+        alert("YubiKey registration failed.");
       }
     }
 
