@@ -1,39 +1,96 @@
-<script>
-  async function go() {
-    const code = document.getElementById("code").value.trim().toUpperCase();
-    const status = document.getElementById("status");
-    if (!code || code.length !== 6) {
-      status.textContent = "Please enter a valid 6-character code.";
-      status.style.color = "red";
-      return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Go to Link</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
     }
 
-    status.textContent = "Checking...";
-    status.style.color = "black";
+    h1 {
+      margin-bottom: 20px;
+    }
 
-    try {
-      const res = await fetch(`https://link-sharing-backend.ikrish61.workers.dev/${code}`, {
-        method: "HEAD"
-      });
+    input[type="text"] {
+      font-size: 18px;
+      padding: 10px;
+      width: 200px;
+      text-transform: uppercase;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
 
-      if (res.status === 200) {
-        window.location.href = `https://link-sharing-backend.ikrish61.workers.dev/${code}`;
-      } else {
-        status.textContent = "Link not found.";
-        status.style.color = "red";
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+    }
+
+    .loading {
+      color: black;
+    }
+
+    .success {
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Enter Code</h1>
+  <input type="text" id="code" placeholder="ABC123" maxlength="6" autocomplete="off" autofocus />
+
+  <div id="status"></div>
+
+  <script>
+    const codeInput = document.getElementById("code");
+    const statusDiv = document.getElementById("status");
+
+    codeInput.addEventListener("input", async () => {
+      const code = codeInput.value.toUpperCase().trim();
+      codeInput.value = code;
+
+      statusDiv.textContent = "";
+      statusDiv.className = "";
+
+      if (code.length === 6) {
+        statusDiv.textContent = "Checking...";
+        statusDiv.className = "loading";
+
+        try {
+          const res = await fetch(`https://link-sharing-backend.ikrish61.workers.dev/${code}`, {
+            method: "HEAD"
+          });
+
+          if (res.status === 200) {
+            statusDiv.textContent = "Found. Redirecting...";
+            statusDiv.className = "success";
+            setTimeout(() => {
+              window.location.href = `https://link-sharing-backend.ikrish61.workers.dev/${code}`;
+            }, 500);
+          } else {
+            statusDiv.textContent = "Link not found.";
+            statusDiv.className = "error";
+          }
+        } catch (err) {
+          console.error(err);
+          statusDiv.textContent = "An error occurred.";
+          statusDiv.className = "error";
+        }
       }
-    } catch (err) {
-      status.textContent = "An error occurred. Try again later.";
-      status.style.color = "red";
-      console.error(err);
-    }
-  }
-
-  // Listen for Enter key
-  document.getElementById("code").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      go();
-    }
-  });
-</script>
-
+    });
+  </script>
+</body>
+</html>
