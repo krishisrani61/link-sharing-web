@@ -73,38 +73,48 @@
   <script>
     const codeInput = document.getElementById("code");
     const statusDiv = document.getElementById("status");
-
-    codeInput.addEventListener("input", async () => {
-      const code = codeInput.value.toUpperCase().trim();
-      codeInput.value = code;
-
-      statusDiv.textContent = "";
-      statusDiv.className = "";
-
-      if (code.length === 6) {
-        statusDiv.textContent = "Checking...";
-        statusDiv.className = "loading";
-
-        try {
-          const res = await fetch(`https://link-sharing-backend.ikrish61.workers.dev/${code}`, {
-            method: "HEAD"
-          });
-
-          if (res.status === 200) {
-            statusDiv.textContent = "Found. Redirecting...";
-            statusDiv.className = "success";
-            setTimeout(() => {
-              window.location.href = `https://link-sharing-backend.ikrish61.workers.dev/${code}`;
-            }, 500);
-          } else {
-            statusDiv.textContent = "Link not found.";
-            statusDiv.className = "error";
-          }
-        } catch (err) {
-          console.error(err);
-          statusDiv.textContent = "An error occurred.";
+  
+    // Function to fetch and redirect
+    async function checkCode(code) {
+      const trimmedCode = code.toUpperCase().trim();
+      codeInput.value = trimmedCode;
+      statusDiv.textContent = "Checking...";
+      statusDiv.className = "loading";
+  
+      try {
+        const res = await fetch(`https://link-sharing-backend.ikrish61.workers.dev/${trimmedCode}`, {
+          method: "HEAD"
+        });
+  
+        if (res.status === 200) {
+          statusDiv.textContent = "Found. Redirecting...";
+          statusDiv.className = "success";
+          setTimeout(() => {
+            window.location.href = `https://link-sharing-backend.ikrish61.workers.dev/${trimmedCode}`;
+          }, 500);
+        } else {
+          statusDiv.textContent = "Link not found.";
           statusDiv.className = "error";
         }
+      } catch (err) {
+        console.error(err);
+        statusDiv.textContent = "An error occurred.";
+        statusDiv.className = "error";
+      }
+    }
+  
+    // Check URL for ?code= parameter
+    const params = new URLSearchParams(window.location.search);
+    const paramCode = params.get("code");
+    if (paramCode && paramCode.length === 6) {
+      checkCode(paramCode);
+    }
+  
+    // Manual input handler
+    codeInput.addEventListener("input", () => {
+      const code = codeInput.value.toUpperCase().trim();
+      if (code.length === 6) {
+        checkCode(code);
       }
     });
   </script>
