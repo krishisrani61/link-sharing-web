@@ -4,48 +4,19 @@
   <meta charset="UTF-8">
   <title>Link Manager Admin</title>
   <style>
-    body {
-      font-family: sans-serif;
-      background: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background: #007BFF;
-      color: white;
-    }
-    input, button {
-      margin: 4px;
-      padding: 8px;
-      font-size: 14px;
-    }
-    #login-status {
-      margin-bottom: 20px;
-      color: green;
-    }
-    .clicklog {
-      font-size: 12px;
-      color: gray;
-    }
+    body { font-family: sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+    h1 { margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #007BFF; color: white; }
+    input, button { margin: 4px; padding: 8px; font-size: 14px; }
+    #login-status { margin-bottom: 20px; color: green; }
+    .clicklog { font-size: 12px; color: gray; }
   </style>
 </head>
 <body>
   <h1>Link Admin Panel</h1>
-  <div id="login-status">🔒 Please authenticate with your YubiKey...</div>
-
+  <div id="login-status">🔒 Authenticating with YubiKey...</div>
   <div id="admin-ui" style="display: none;">
     <h2>Add New Link</h2>
     <input id="new-code" placeholder="Custom Code (or leave blank)" />
@@ -71,26 +42,47 @@
 
   <script>
     const API_BASE = "https://link-sharing-backend.ikrish61.workers.dev";
-    let sessionToken = null;
+    const storedCredentialId = "YOUR_BASE64_ENCODED_ID_HERE"; // Replace with your actual ID
 
-    async function authenticate() {
-      // 🔐 Fake auth for now: skip WebAuthn and set test token
-      sessionToken = "demo-token";
+    async function authenticateWithYubiKey() {
+      try {
+        const credential = await navigator.credentials.get({
+          publicKey: {
+            challenge: new Uint8Array(32), // static challenge for now
+            allowCredentials: [{
+              type: "public-key",
+              id: Uint8Array.from(atob(storedCredentialId), c => c.charCodeAt(0))
+            }],
+            timeout: 60000,
+            userVerification: "required"
+          }
+        });
 
-      // Store in memory (can be replaced with localStorage or cookie)
-      document.getElementById("login-status").textContent = "✅ Authenticated";
-      document.getElementById("admin-ui").style.display = "block";
-      loadLinks();
+        window.credential = credential;
+        document.getElementById("login-status").textContent = "✅ Authenticated";
+        document.getElementById("admin-ui").style.display = "block";
+        loadLinks();
+      } catch (err) {
+        console.error("Auth failed", err);
+        document.getElementById("login-status").textContent = "❌ Authentication failed";
+      }
+    }
+
+    async function sendAuthenticated(endpoint, body = {}) {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: window.credential, challenge: "static", ...body })
+      });
+      return await res.json();
     }
 
     async function loadLinks() {
-      const res = await fetch(`${API_BASE}/api/list`, {
-        headers: { "Authorization": `Bearer ${sessionToken}` }
-      });
-      const data = await res.json();
-
+      const data = await sendAuthenticated("/api/list");
       const tbody = document.querySelector("#link-table tbody");
       tbody.innerHTML = "";
+
+      if (!Array.isArray(data)) return;
 
       data.forEach(link => {
         const tr = document.createElement("tr");
@@ -112,17 +104,8 @@
       const url = document.getElementById("new-url").value.trim();
       if (!url.startsWith("http")) return alert("Invalid URL");
 
-      const res = await fetch(`${API_BASE}/api/add`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${sessionToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ code: code || undefined, url })
-      });
-
-      if (res.ok) {
-        alert("Link added");
+      const res = await sendAuthenticated("/api/add", { code: code || undefined, url });
+      if (res.status === "Created") {
         document.getElementById("new-code").value = "";
         document.getElementById("new-url").value = "";
         loadLinks();
@@ -132,33 +115,18 @@
     }
 
     async function editLink(code, newUrl) {
-      const res = await fetch(`${API_BASE}/api/edit`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${sessionToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ code, url: newUrl })
-      });
-      if (!res.ok) alert("Failed to update link");
+      const res = await sendAuthenticated("/api/edit", { code, url: newUrl });
+      if (res.status !== "Updated") alert("Failed to update link");
     }
 
     async function deleteLink(code) {
       if (!confirm("Delete this link?")) return;
-      const res = await fetch(`${API_BASE}/api/delete`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${sessionToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ code })
-      });
-      if (res.ok) loadLinks();
+      const res = await sendAuthenticated("/api/delete", { code });
+      if (res.status === "Deleted") loadLinks();
       else alert("Delete failed");
     }
 
-    // Start the fake auth (replace with WebAuthn logic later)
-    authenticate();
+    authenticateWithYubiKey();
   </script>
 </body>
 </html>
