@@ -2,128 +2,152 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Link Manager Admin</title>
+  <title>Link Sharing Admin</title>
   <style>
-    body { font-family: sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
-    h1 { margin-bottom: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #007BFF; color: white; }
-    input, button { margin: 4px; padding: 8px; font-size: 14px; }
-    #login-status { margin-bottom: 20px; color: green; }
-    .clicklog { font-size: 12px; color: gray; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    #linksTable {
+      margin-top: 20px;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #linksTable th, #linksTable td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    #linksTable th {
+      background-color: #eee;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 5px;
+    }
+    button {
+      padding: 5px 10px;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
-  <h1>Link Admin Panel</h1>
-  <div id="login-status">🔒 Authenticating with YubiKey...</div>
-  <div id="admin-ui" style="display: none;">
-    <h2>Add New Link</h2>
-    <input id="new-code" placeholder="Custom Code (or leave blank)" />
-    <input id="new-url" placeholder="https://example.com" />
+  <h1>Admin Panel</h1>
+  <div id="authStatus">Authenticating with YubiKey...</div>
+  <div id="adminUI" class="hidden">
+    <h2>Manage Links</h2>
+    <input type="text" id="newCode" placeholder="Code (e.g. ABC123)" maxlength="6">
+    <input type="text" id="newURL" placeholder="URL (e.g. https://example.com)">
     <button onclick="addLink()">Add</button>
-
-    <h2>All Links</h2>
-    <table id="link-table">
+    <table id="linksTable">
       <thead>
-        <tr>
-          <th>Code</th>
-          <th>URL</th>
-          <th>Clicks</th>
-          <th>Created</th>
-          <th>Last Access</th>
-          <th>Click Log</th>
-          <th>Actions</th>
-        </tr>
+        <tr><th>Code</th><th>URL</th><th>Clicks</th><th>Actions</th></tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
 
   <script>
-    const API_BASE = "https://link-sharing-backend.ikrish61.workers.dev";
-    const storedCredentialId = "YOUR_BASE64_ENCODED_ID_HERE"; // Replace with your actual ID
+    const backendURL = 'https://link-sharing-backend.ikrish61.workers.dev';
+
+    function base64urlEncode(uint8) {
+      return btoa(String.fromCharCode(...uint8))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+    }
+
+    function base64urlDecode(str) {
+      str = str.replace(/-/g, "+").replace(/_/g, "/");
+      while (str.length % 4) str += "=";
+      const binary = atob(str);
+      const buffer = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+      return buffer.buffer;
+    }
 
     async function authenticateWithYubiKey() {
       try {
-        const credential = await navigator.credentials.get({
-          publicKey: {
-            challenge: new Uint8Array(32), // static challenge for now
-            allowCredentials: [{
-              type: "public-key",
-              id: Uint8Array.from(atob(storedCredentialId), c => c.charCodeAt(0))
-            }],
-            timeout: 60000,
-            userVerification: "required"
-          }
+        const res = await fetch(`${backendURL}/auth/verify`, {
+          method: 'POST'
+        });
+        const options = await res.json();
+
+        options.publicKey.challenge = base64urlDecode(options.publicKey.challenge);
+        options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(cred => ({
+          ...cred,
+          id: base64urlDecode(cred.id)
+        }));
+
+        const assertion = await navigator.credentials.get({ publicKey: options.publicKey });
+
+        const authRes = await fetch(`${backendURL}/api/list`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credential: {
+              id: base64urlEncode(new Uint8Array(assertion.rawId))
+            }
+          })
         });
 
-        window.credential = credential;
-        document.getElementById("login-status").textContent = "✅ Authenticated";
-        document.getElementById("admin-ui").style.display = "block";
-        loadLinks();
+        const links = await authRes.json();
+        document.getElementById('authStatus').classList.add('hidden');
+        document.getElementById('adminUI').classList.remove('hidden');
+        loadLinks(links);
       } catch (err) {
         console.error("Auth failed", err);
-        document.getElementById("login-status").textContent = "❌ Authentication failed";
+        document.getElementById('authStatus').textContent = 'Authentication failed';
       }
     }
 
-    async function sendAuthenticated(endpoint, body = {}) {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: window.credential, challenge: "static", ...body })
-      });
-      return await res.json();
-    }
-
-    async function loadLinks() {
-      const data = await sendAuthenticated("/api/list");
-      const tbody = document.querySelector("#link-table tbody");
-      tbody.innerHTML = "";
-
-      if (!Array.isArray(data)) return;
-
-      data.forEach(link => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+    function loadLinks(links) {
+      const tbody = document.querySelector("#linksTable tbody");
+      tbody.innerHTML = '';
+      links.forEach(link => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
           <td>${link.code}</td>
-          <td><input value="${link.url}" onchange="editLink('${link.code}', this.value)"/></td>
+          <td><input type="text" value="${link.url}" onchange="editLink('${link.code}', this.value)"></td>
           <td>${link.clicks}</td>
-          <td>${new Date(link.created).toLocaleString()}</td>
-          <td>${link.lastAccess ? new Date(link.lastAccess).toLocaleString() : "-"}</td>
-          <td class="clicklog">${(link.clickLog || []).slice(-5).map(t => new Date(t).toLocaleString()).join("<br>")}</td>
-          <td><button onclick="deleteLink('${link.code}')">❌ Delete</button></td>
+          <td><button onclick="deleteLink('${link.code}')">Delete</button></td>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
       });
     }
 
     async function addLink() {
-      const code = document.getElementById("new-code").value.trim();
-      const url = document.getElementById("new-url").value.trim();
-      if (!url.startsWith("http")) return alert("Invalid URL");
-
-      const res = await sendAuthenticated("/api/add", { code: code || undefined, url });
-      if (res.status === "Created") {
-        document.getElementById("new-code").value = "";
-        document.getElementById("new-url").value = "";
-        loadLinks();
-      } else {
-        alert("Failed to add link");
-      }
+      const code = document.getElementById("newCode").value.toUpperCase();
+      const url = document.getElementById("newURL").value;
+      await fetch(`${backendURL}/api/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, url })
+      });
+      location.reload();
     }
 
-    async function editLink(code, newUrl) {
-      const res = await sendAuthenticated("/api/edit", { code, url: newUrl });
-      if (res.status !== "Updated") alert("Failed to update link");
+    async function editLink(code, url) {
+      await fetch(`${backendURL}/api/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, url })
+      });
     }
 
     async function deleteLink(code) {
-      if (!confirm("Delete this link?")) return;
-      const res = await sendAuthenticated("/api/delete", { code });
-      if (res.status === "Deleted") loadLinks();
-      else alert("Delete failed");
+      await fetch(`${backendURL}/api/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      location.reload();
     }
 
     authenticateWithYubiKey();
