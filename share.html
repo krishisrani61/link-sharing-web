@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Link Code Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    #codeDisplay {
+      font-size: 48px;
+      font-weight: bold;
+      letter-spacing: 10px;
+      margin-top: 20px;
+    }
+
+    #phonetic {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+
+    #qrcode {
+      margin-top: 20px;
+    }
+
+    #shareBtn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #1e88e5;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="codeDisplay">Loading...</div>
+  <div id="phonetic"></div>
+  <canvas id="qrcode"></canvas>
+  <button id="shareBtn">Share Link</button>
+
+  <script>
+    const NATO = {
+      A: "Alpha", B: "Bravo", C: "Charlie", D: "Delta", E: "Echo", F: "Foxtrot",
+      G: "Golf", H: "Hotel", I: "India", J: "Juliett", K: "Kilo", L: "Lima",
+      M: "Mike", N: "November", O: "Oscar", P: "Papa", Q: "Quebec", R: "Romeo",
+      S: "Sierra", T: "Tango", U: "Uniform", V: "Victor", W: "Whiskey", X: "X-ray",
+      Y: "Yankee", Z: "Zulu",
+      0: "Zero", 1: "One", 2: "Two", 3: "Three", 4: "Four",
+      5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine"
+    };
+
+    function getParam(name) {
+      const url = new URL(window.location.href);
+      return url.searchParams.get(name) || "";
+    }
+
+    const code = getParam("code").toUpperCase().slice(0, 6).replace(/[^A-Z0-9]/g, "");
+    const link = `https://link.kisrani.com?code=${code}`;
+
+    document.getElementById("codeDisplay").textContent = code;
+
+    const phonetic = code.split("").map(ch => NATO[ch] || ch).join(" ");
+    document.getElementById("phonetic").textContent = phonetic;
+
+    const qr = new QRious({
+      element: document.getElementById("qrcode"),
+      value: link,
+      size: 200
+    });
+
+    document.getElementById("shareBtn").addEventListener("click", async () => {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Shared Link",
+          text: `Here's your code link: ${link}`,
+          url: link
+        });
+      } else {
+        prompt("Copy this link manually:", link);
+      }
+    });
+  </script>
+</body>
+</html>
