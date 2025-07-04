@@ -63,39 +63,47 @@
     const endpoint = "https://link-sharing-backend.ikrish61.workers.dev";
 
     async function loadLinks() {
-      const res = await fetch(`${endpoint}/api/list`);
-      const data = await res.json();
-      const tbody = document.querySelector("#linkTable tbody");
-      tbody.innerHTML = "";
+      try {
+        const res = await fetch(`${endpoint}/api/list`);
+        const data = await res.json();
+        const tbody = document.querySelector("#linkTable tbody");
+        tbody.innerHTML = "";
 
-    Object.entries(data).forEach(([code, info]) => {
-      if (!info || !info.url) return; // skip invalid or deleted records
-    
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${code}</td>
-        <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
-        <td>${info.clicks}</td>
-        <td>${new Date(info.created).toLocaleString()}</td>
-        <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
-        <td class="actions">
-          <button onclick="deleteLink('${code}')">Delete</button>
-          <button onclick="copyCode('${code}')">Copy</button>
-        </td>
-      `;
-      tbody.appendChild(row);
-    });
+        Object.entries(data).forEach(([code, info]) => {
+          if (!info || typeof info !== "object" || !info.url) return;
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${code}</td>
+            <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
+            <td>${info.clicks}</td>
+            <td>${new Date(info.created).toLocaleString()}</td>
+            <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
+            <td class="actions">
+              <button onclick="deleteLink('${code}')">Delete</button>
+              <button onclick="copyCode('${code}')">Copy</button>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Failed to load links", err);
+        alert("Error loading links. Check console for details.");
+      }
+    }
 
     async function addLink() {
       const code = document.getElementById("addCode").value.trim().toUpperCase();
       const url = document.getElementById("addUrl").value.trim();
       const payload = code ? { code, url } : { url };
       const path = code ? "/api/add" : "/api/share";
-      const res = await fetch(`${endpoint}${path}`, {
+      await fetch(`${endpoint}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+      document.getElementById("addCode").value = "";
+      document.getElementById("addUrl").value = "";
       await loadLinks();
     }
 
