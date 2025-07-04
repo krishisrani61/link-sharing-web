@@ -1,135 +1,131 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Link Admin Panel</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      padding: 2rem;
-    }
-    h1 {
-      text-align: center;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-    }
-    th, td {
-      padding: 10px;
-      border: 1px solid #ccc;
-      text-align: left;
-    }
-    input, button {
-      padding: 6px;
-      font-size: 14px;
-    }
-    .actions {
-      display: flex;
-      gap: 5px;
-    }
-    .form-section {
-      margin-top: 2rem;
-    }
-  </style>
-</head>
-<body>
-  <h1>Link Management</h1>
-  <table id="linkTable">
-    <thead>
-      <tr>
-        <th>Code</th>
-        <th>URL</th>
-        <th>Clicks</th>
-        <th>Created</th>
-        <th>Last Access</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+// === Cloudflare Worker with click tracking and management API (with token auth) ===
 
-  <div class="form-section">
-    <h2>Add New Link</h2>
-    <input id="addCode" placeholder="Custom Code (optional)" />
-    <input id="addUrl" placeholder="https://example.com" size="40" />
-    <button onclick="addLink()">Add</button>
-  </div>
+const ADMIN_TOKEN = "YOUR_SECRET_TOKEN_HERE"; // Replace this with your actual token
 
-  <script>
-    const endpoint = "https://link-sharing-backend.ikrish61.workers.dev";
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const headers = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+      "Access-Control-Allow-Headers": "Content-Type"
+    };
 
-    async function loadLinks() {
-      try {
-        const res = await fetch(`${endpoint}/api/list`);
-        const data = await res.json();
-        const tbody = document.querySelector("#linkTable tbody");
-        tbody.innerHTML = "";
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers });
+    }
 
-        Object.entries(data).forEach(([code, info]) => {
-          if (!info || typeof info !== "object" || !info.url) return;
+    const pathname = url.pathname;
+    const isAdminRoute = pathname.startsWith("/api/") && pathname !== "/api/share";
+    const token = url.searchParams.get("token");
 
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${code}</td>
-            <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
-            <td>${info.clicks}</td>
-            <td>${new Date(info.created).toLocaleString()}</td>
-            <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
-            <td class="actions">
-              <button onclick="deleteLink('${code}')">Delete</button>
-              <button onclick="copyCode('${code}')">Copy</button>
-            </td>
-          `;
-          tbody.appendChild(row);
-        });
-      } catch (err) {
-        console.error("Failed to load links", err);
-        alert("Error loading links. Check console for details.");
+    if (isAdminRoute && token !== ADMIN_TOKEN) {
+      return new Response("Unauthorized", { status: 401, headers });
+    }
+
+    // === API: LIST ALL ===
+    if (request.method === "GET" && pathname === "/api/list") {
+      const list = await env.LINKS.list();
+      const result = {};
+      for (const key of list.keys) {
+        const value = await env.LINKS.get(key.name);
+        try {
+          result[key.name] = JSON.parse(value);
+        } catch (e) {
+          result[key.name] = { error: "Invalid JSON" };
+        }
       }
-    }
-
-    async function addLink() {
-      const code = document.getElementById("addCode").value.trim().toUpperCase();
-      const url = document.getElementById("addUrl").value.trim();
-      const payload = code ? { code, url } : { url };
-      const path = code ? "/api/add" : "/api/share";
-      await fetch(`${endpoint}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      document.getElementById("addCode").value = "";
-      document.getElementById("addUrl").value = "";
-      await loadLinks();
-    }
-
-    async function deleteLink(code) {
-      await fetch(`${endpoint}/api/delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code })
-      });
-      await loadLinks();
-    }
-
-    async function editUrl(code, newUrl) {
-      await fetch(`${endpoint}/api/edit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, newUrl })
+      return new Response(JSON.stringify(result), {
+        headers: { "Content-Type": "application/json", ...headers }
       });
     }
 
-    function copyCode(code) {
-      navigator.clipboard.writeText(`${endpoint}/${code}`);
-      alert("Copied: " + code);
+    // === REDIRECT ===
+    if (request.method === "GET" && pathname.length === 7) {
+      const code = pathname.slice(1);
+      const raw = await env.LINKS.get(code);
+      if (!raw) return new Response("Not found", { status: 404, headers });
+
+      const data = JSON.parse(raw);
+      data.clicks += 1;
+      data.lastAccess = Date.now();
+      data.clickLog.push(Date.now());
+      await env.LINKS.put(code, JSON.stringify(data));
+
+      return Response.redirect(data.url, 302);
     }
 
-    loadLinks();
-  </script>
-</body>
-</html>
+    // === HEAD for code existence ===
+    if (request.method === "HEAD" && pathname.length === 7) {
+      const code = pathname.slice(1);
+      const exists = await env.LINKS.get(code);
+      return new Response(null, { status: exists ? 200 : 404, headers });
+    }
+
+    // === API: CREATE ===
+    if (request.method === "POST" && pathname === "/api/share") {
+      const { url: longUrl } = await request.json();
+      if (!longUrl || !longUrl.startsWith("http")) {
+        return new Response("Invalid URL", { status: 400, headers });
+      }
+
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      let code;
+      do {
+        code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+      } while (await env.LINKS.get(code));
+
+      const now = Date.now();
+      const data = {
+        url: longUrl,
+        clicks: 0,
+        created: now,
+        lastAccess: null,
+        clickLog: []
+      };
+
+      await env.LINKS.put(code, JSON.stringify(data));
+      return new Response(JSON.stringify({ code }), {
+        headers: { "Content-Type": "application/json", ...headers }
+      });
+    }
+
+    // === API: EDIT ===
+    if (request.method === "POST" && pathname === "/api/edit") {
+      const { code, newUrl } = await request.json();
+      const existing = await env.LINKS.get(code);
+      if (!existing) return new Response("Not found", { status: 404, headers });
+      const data = JSON.parse(existing);
+      data.url = newUrl;
+      await env.LINKS.put(code, JSON.stringify(data));
+      return new Response("Updated", { status: 200, headers });
+    }
+
+    // === API: DELETE ===
+    if (request.method === "POST" && pathname === "/api/delete") {
+      const { code } = await request.json();
+      await env.LINKS.delete(code);
+      return new Response("Deleted", { status: 200, headers });
+    }
+
+    // === API: ADD (manual) ===
+    if (request.method === "POST" && pathname === "/api/add") {
+      const { code, url: longUrl } = await request.json();
+      const exists = await env.LINKS.get(code);
+      if (exists) return new Response("Code exists", { status: 409, headers });
+
+      const now = Date.now();
+      const data = {
+        url: longUrl,
+        clicks: 0,
+        created: now,
+        lastAccess: null,
+        clickLog: []
+      };
+      await env.LINKS.put(code, JSON.stringify(data));
+      return new Response("Added", { status: 201, headers });
+    }
+
+    return new Response("Not found", { status: 404, headers });
+  }
+};
