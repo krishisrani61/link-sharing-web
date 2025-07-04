@@ -2,96 +2,93 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Link Code Viewer</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Link QR Viewer</title>
   <style>
     body {
+      margin: 0;
+      background-color: #121212;
+      color: #f0f0f0;
       font-family: Arial, sans-serif;
-      background: #121212;
-      color: #ffffff;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-      padding: 1rem;
+      padding: 2rem;
       text-align: center;
     }
-
-    #codeDisplay {
-      font-size: 48px;
-      font-weight: bold;
-      letter-spacing: 10px;
-      margin-top: 20px;
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      letter-spacing: 0.2rem;
     }
-
     #phonetic {
-      margin-top: 10px;
-      font-size: 18px;
+      margin-top: 0.5rem;
+      font-size: 1.2rem;
+      color: #aaaaaa;
     }
-
-    #qrcode {
-      margin-top: 20px;
+    #qr {
+      margin: 2rem 0;
     }
-
-    #shareBtn {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
+    button {
       background-color: #1e88e5;
-      border: none;
-      border-radius: 8px;
       color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 8px;
       cursor: pointer;
+    }
+    button:active {
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-  <div id="codeDisplay">Loading...</div>
-  <div id="phonetic"></div>
-  <canvas id="qrcode"></canvas>
+  <h1 id="code">LOADING</h1>
+  <div id="phonetic">Loading phonetics...</div>
+  <canvas id="qr"></canvas>
   <button id="shareBtn">Share Link</button>
 
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code')?.toUpperCase() || "UNKNOWN";
+
     const NATO = {
-      A: "Alpha", B: "Bravo", C: "Charlie", D: "Delta", E: "Echo", F: "Foxtrot",
-      G: "Golf", H: "Hotel", I: "India", J: "Juliett", K: "Kilo", L: "Lima",
-      M: "Mike", N: "November", O: "Oscar", P: "Papa", Q: "Quebec", R: "Romeo",
-      S: "Sierra", T: "Tango", U: "Uniform", V: "Victor", W: "Whiskey", X: "X-ray",
-      Y: "Yankee", Z: "Zulu",
-      0: "Zero", 1: "One", 2: "Two", 3: "Three", 4: "Four",
-      5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine"
+      A: "Alpha",   B: "Bravo",    C: "Charlie", D: "Delta",   E: "Echo",    F: "Foxtrot",
+      G: "Golf",    H: "Hotel",    I: "India",   J: "Juliett", K: "Kilo",    L: "Lima",
+      M: "Mike",    N: "November", O: "Oscar",   P: "Papa",    Q: "Quebec",  R: "Romeo",
+      S: "Sierra",  T: "Tango",    U: "Uniform", V: "Victor",  W: "Whiskey", X: "X-ray",
+      Y: "Yankee",  Z: "Zulu",
+      0: "Zero",    1: "One",      2: "Two",     3: "Three",   4: "Four",
+      5: "Five",    6: "Six",      7: "Seven",   8: "Eight",   9: "Nine"
     };
 
-    function getParam(name) {
-      const url = new URL(window.location.href);
-      return url.searchParams.get(name) || "";
-    }
-
-    const code = getParam("code").toUpperCase().slice(0, 6).replace(/[^A-Z0-9]/g, "");
     const link = `https://link.kisrani.com?code=${code}`;
+    document.getElementById("code").textContent = code;
 
-    document.getElementById("codeDisplay").textContent = code;
+    document.getElementById("phonetic").textContent = code
+      .split('')
+      .map(char => NATO[char.toUpperCase()] || char)
+      .join(' • ');
 
-    const phonetic = code.split("").map(ch => NATO[ch] || ch).join(" ");
-    document.getElementById("phonetic").textContent = phonetic;
-
-    const qr = new QRious({
-      element: document.getElementById("qrcode"),
-      value: link,
-      size: 200
+    QRCode.toCanvas(document.getElementById("qr"), link, {
+      color: {
+        dark: "#ffffff",
+        light: "#121212"
+      },
+      width: 220
     });
 
     document.getElementById("shareBtn").addEventListener("click", async () => {
-      if (navigator.share) {
+      try {
         await navigator.share({
-          title: "Shared Link",
-          text: `Here's your code link: ${link}`,
+          title: "Link to Code",
+          text: `Here's the link for code ${code}`,
           url: link
         });
-      } else {
-        prompt("Copy this link manually:", link);
+      } catch (err) {
+        alert("Sharing failed or not supported.");
       }
     });
   </script>
