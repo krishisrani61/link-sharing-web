@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Go to Link</title>
+</head>
+<body>
+  <h1>Enter Code</h1>
+  <input type="text" id="code" placeholder="ABC123" />
+  <button onclick="go()">Go</button>
+
+  <script>
+    function go() {
+      const code = document.getElementById("code").value;
+      window.location.href = `https://link-sharing-backend.ikrish61.workers.dev/${code}`;
+    }
+  </script>
+</body>
+</html>
