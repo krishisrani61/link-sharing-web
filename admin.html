@@ -1,115 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Admin Panel</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Link Admin Panel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+      padding: 2rem;
+    }
+    h1 {
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+    input, button {
+      padding: 6px;
+      font-size: 14px;
+    }
+    .actions {
+      display: flex;
+      gap: 5px;
+    }
+    .form-section {
+      margin-top: 2rem;
+    }
+  </style>
 </head>
 <body>
-  <h1>Admin Panel (YubiKey Protected)</h1>
+  <h1>Link Management</h1>
+  <table id="linkTable">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>URL</th>
+        <th>Clicks</th>
+        <th>Created</th>
+        <th>Last Access</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-  <button onclick="registerYubiKey()">Register YubiKey</button>
-  <button onclick="authenticateWithYubiKey()">Login with YubiKey</button>
-
-  <div id="controls" style="display:none;">
-    <h2>Manage Links</h2>
-    <input type="text" id="newCode" placeholder="Code (optional)">
-    <input type="text" id="newUrl" placeholder="https://example.com">
+  <div class="form-section">
+    <h2>Add New Link</h2>
+    <input id="addCode" placeholder="Custom Code (optional)" />
+    <input id="addUrl" placeholder="https://example.com" size="40" />
     <button onclick="addLink()">Add</button>
-
-    <ul id="links"></ul>
   </div>
 
   <script>
-    let credentialId = null;
-
-    async function registerYubiKey() {
-      try {
-        const res = await fetch('https://link-sharing-backend.ikrish61.workers.dev/auth/register');
-        const data = await res.json();
-
-        const pubKey = {
-          ...data.pubKey,
-          challenge: Uint8Array.from(atob(data.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
-          user: {
-            ...data.pubKey.user,
-            id: Uint8Array.from(data.pubKey.user.id.data)
-          }
-        };
-
-        const cred = await navigator.credentials.create({ publicKey: pubKey });
-        alert("YubiKey registered successfully!");
-      } catch (err) {
-        console.error("Registration failed", err);
-        alert("Registration failed");
-      }
-    }
-
-    async function authenticateWithYubiKey() {
-      try {
-        const allowCredentials = [{
-          id: Uint8Array.from(atob(localStorage.getItem("yubiKeyId") || ""), c => c.charCodeAt(0)),
-          type: "public-key"
-        }];
-
-        const cred = await navigator.credentials.get({
-          publicKey: {
-            challenge: new Uint8Array(32),
-            allowCredentials
-          }
-        });
-
-        credentialId = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
-        localStorage.setItem("yubiKeyId", credentialId);
-
-        const res = await fetch('https://link-sharing-backend.ikrish61.workers.dev/auth/verify', {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: credentialId })
-        });
-
-        const out = await res.json();
-        if (out.status === "ok") {
-          document.getElementById("controls").style.display = "block";
-          loadLinks();
-        } else {
-          throw new Error("Auth rejected");
-        }
-      } catch (err) {
-        console.error("Auth failed", err);
-        alert("YubiKey authentication failed.");
-      }
-    }
+    const endpoint = "https://link-sharing-backend.ikrish61.workers.dev";
 
     async function loadLinks() {
-      const res = await fetch('https://link-sharing-backend.ikrish61.workers.dev/api/list', {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: { id: credentialId } })
-      });
-
+      const res = await fetch(`${endpoint}/api/list`);
       const data = await res.json();
-      const list = document.getElementById("links");
-      list.innerHTML = "";
+      const tbody = document.querySelector("#linkTable tbody");
+      tbody.innerHTML = "";
 
-      data.forEach(link => {
-        const li = document.createElement("li");
-        li.innerText = `${link.code}: ${link.url}`;
-        list.appendChild(li);
+      Object.entries(data).forEach(([code, info]) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${code}</td>
+          <td><input value="${info.url}" onchange="editUrl('${code}', this.value)" /></td>
+          <td>${info.clicks}</td>
+          <td>${new Date(info.created).toLocaleString()}</td>
+          <td>${info.lastAccess ? new Date(info.lastAccess).toLocaleString() : "-"}</td>
+          <td class="actions">
+            <button onclick="deleteLink('${code}')">Delete</button>
+            <button onclick="copyCode('${code}')">Copy</button>
+          </td>
+        `;
+        tbody.appendChild(row);
       });
     }
 
     async function addLink() {
-      const code = document.getElementById("newCode").value;
-      const url = document.getElementById("newUrl").value;
-
-      await fetch('https://link-sharing-backend.ikrish61.workers.dev/api/add', {
+      const code = document.getElementById("addCode").value.trim().toUpperCase();
+      const url = document.getElementById("addUrl").value.trim();
+      const payload = code ? { code, url } : { url };
+      const path = code ? "/api/add" : "/api/share";
+      const res = await fetch(`${endpoint}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: { id: credentialId }, code, url })
+        body: JSON.stringify(payload)
       });
-
-      loadLinks();
+      await loadLinks();
     }
+
+    async function deleteLink(code) {
+      await fetch(`${endpoint}/api/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code })
+      });
+      await loadLinks();
+    }
+
+    async function editUrl(code, newUrl) {
+      await fetch(`${endpoint}/api/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, newUrl })
+      });
+    }
+
+    function copyCode(code) {
+      navigator.clipboard.writeText(`${endpoint}/${code}`);
+      alert("Copied: " + code);
+    }
+
+    loadLinks();
   </script>
 </body>
 </html>
