@@ -73,19 +73,21 @@
   <script>
     const codeInput = document.getElementById("code");
     const statusDiv = document.getElementById("status");
-  
+
     // Function to fetch and redirect
     async function checkCode(code) {
       const trimmedCode = code.toUpperCase().trim();
+      if (trimmedCode.length !== 4) return;
+
       codeInput.value = trimmedCode;
       statusDiv.textContent = "Checking...";
       statusDiv.className = "loading";
-  
+
       try {
         const res = await fetch(`https://link-sharing-backend.ikrish61.workers.dev/${trimmedCode}`, {
           method: "HEAD"
         });
-  
+
         if (res.status === 200) {
           statusDiv.textContent = "Found. Redirecting...";
           statusDiv.className = "success";
@@ -102,19 +104,26 @@
         statusDiv.className = "error";
       }
     }
-  
+
     // Check URL for ?code= parameter
     const params = new URLSearchParams(window.location.search);
     const paramCode = params.get("code");
-    if (paramCode && paramCode.length === 4) {
+    if (paramCode && paramCode.trim().length === 4) {
       checkCode(paramCode);
     }
-  
+
     // Manual input handler
     codeInput.addEventListener("input", () => {
       const code = codeInput.value.toUpperCase().trim();
       if (code.length === 4) {
         checkCode(code);
+      }
+    });
+
+    // Enter key support
+    codeInput.addEventListener("keyup", (e) => {
+      if (e.key === "Enter" && codeInput.value.trim().length === 4) {
+        checkCode(codeInput.value);
       }
     });
   </script>
