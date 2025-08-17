@@ -1,96 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Link QR Viewer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LOADING • Link QR Viewer</title>
   <style>
-    body {
-      margin: 0;
-      background-color: #121212;
-      color: #f0f0f0;
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
-      text-align: center;
+    :root{
+      --bg:#121212; --fg:#f0f0f0; --muted:#aaaaaa;
+      --btn:#1e88e5; --btn-hover:#1976d2; --card:#1a1a1a;
     }
-    h1 {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-      letter-spacing: 0.2rem;
+    html,body{height:100%}
+    body{
+      margin:0;background-color:var(--bg);color:var(--fg);
+      font-family:Arial,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+      padding:2rem;text-align:center
     }
-    #phonetic {
-      margin-top: 0.5rem;
-      font-size: 1.2rem;
-      color: #aaaaaa;
+    h1{font-size:3rem;margin:.25rem 0 0;letter-spacing:.2rem}
+    #phonetic{margin-top:.5rem;font-size:1.1rem;color:var(--muted)}
+    #card{
+      background:var(--card);border-radius:16px; padding:1.5rem 1.25rem; margin-top:1.25rem;
+      box-shadow:0 12px 30px rgba(0,0,0,.35);
+      display:flex;flex-direction:column;align-items:center;gap:1rem
     }
-    #qr {
-      margin: 2rem 0;
+    #qr{margin:.75rem 0}
+    .btns{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center}
+    button{
+      background:var(--btn);color:#fff;border:0;border-radius:8px;cursor:pointer;
+      padding:.7rem 1rem;font-size:1rem;min-width:9.5rem
     }
-    button {
-      background-color: #1e88e5;
-      color: white;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      border-radius: 8px;
-      cursor: pointer;
+    button:active{opacity:.9}
+    button:hover{background:var(--btn-hover)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    /* tiny toast */
+    #toast{
+      position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+      background:#2a2a2a;color:#fff;padding:.55rem .9rem;border-radius:10px;
+      opacity:0;pointer-events:none;transition:opacity .18s ease;box-shadow:0 8px 22px rgba(0,0,0,.35)
     }
-    button:active {
-      opacity: 0.8;
-    }
+    #toast.show{opacity:1}
   </style>
 </head>
 <body>
-  <h1 id="code">LOADING</h1>
+  <h1 id="code" class="mono">LOADING</h1>
   <div id="phonetic">Loading phonetics...</div>
-  <canvas id="qr"></canvas>
-  <button id="shareBtn">Share Link</button>
+
+  <div id="card" role="group" aria-label="QR and actions">
+    <canvas id="qr" width="220" height="220" aria-label="QR code"></canvas>
+    <div class="btns">
+      <button id="copyLinkBtn" aria-label="Copy short link">Copy Link</button>
+      <button id="copyCodeBtn" aria-label="Copy code">Copy Code</button>
+      <button id="shareLinkBtn" aria-label="Share short link">Share Link</button>
+      <button id="shareCodeBtn" aria-label="Share code only">Share Code</button>
+    </div>
+  </div>
+
+  <div id="toast" class="mono">Copied!</div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code')?.toUpperCase() || "UNKNOWN";
+    // --- read & validate code ---
+    const p = new URLSearchParams(location.search);
+    const raw = (p.get('code') || '').toUpperCase().trim();
+    const CODE = /^[A-Z2-7]{4,6}$/.test(raw) ? raw : 'UNKNOWN';
 
+    // set title with code first
+    document.title = `${CODE} • Link QR Viewer`;
+
+    // UI text
+    const codeEl = document.getElementById('code');
+    const phoneticEl = document.getElementById('phonetic');
+    codeEl.textContent = CODE;
+
+    // NATO map
     const NATO = {
-      A: "Alpha",   B: "Bravo",    C: "Charlie", D: "Delta",   E: "Echo",    F: "Foxtrot",
-      G: "Golf",    H: "Hotel",    I: "India",   J: "Juliett", K: "Kilo",    L: "Lima",
-      M: "Mike",    N: "November", O: "Oscar",   P: "Papa",    Q: "Quebec",  R: "Romeo",
-      S: "Sierra",  T: "Tango",    U: "Uniform", V: "Victor",  W: "Whiskey", X: "X-ray",
-      Y: "Yankee",  Z: "Zulu",
-      0: "Zero",    1: "One",      2: "Two",     3: "Three",   4: "Four",
-      5: "Five",    6: "Six",      7: "Seven",   8: "Eight",   9: "Nine"
+      A:"Alpha",B:"Bravo",C:"Charlie",D:"Delta",E:"Echo",F:"Foxtrot",
+      G:"Golf",H:"Hotel",I:"India",J:"Juliett",K:"Kilo",L:"Lima",
+      M:"Mike",N:"November",O:"Oscar",P:"Papa",Q:"Quebec",R:"Romeo",
+      S:"Sierra",T:"Tango",U:"Uniform",V:"Victor",W:"Whiskey",X:"X-ray",
+      Y:"Yankee",Z:"Zulu",0:"Zero",1:"One",2:"Two",3:"Three",4:"Four",
+      5:"Five",6:"Six",7:"Seven",8:"Eight",9:"Nine"
+    };
+    phoneticEl.textContent = CODE.split('').map(ch => NATO[ch] || ch).join(' • ');
+
+    // short link (keep it tiny for QR)
+    const link = `https://l.kisrani.com/${CODE}`;
+
+    // --- render QR with quiet zone + EC level ---
+    QRCode.toCanvas(
+      document.getElementById('qr'),
+      link,
+      {
+        errorCorrectionLevel: 'M', // good density + resilience
+        margin: 4,                 // quiet zone (4 modules)
+        color: { dark: "#ffffff", light: "#121212" },
+        width: 220
+      },
+      err => { if (err) console.error(err); }
+    );
+
+    // --- helpers ---
+    const toast = (msg='Copied!')=>{
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toast._id);
+      toast._id = setTimeout(()=>t.classList.remove('show'), 1400);
     };
 
-    const link = `https://l.kisrani.com/${code}`;
-    document.getElementById("code").textContent = code;
-
-    document.getElementById("phonetic").textContent = code
-      .split('')
-      .map(char => NATO[char.toUpperCase()] || char)
-      .join(' • ');
-
-    QRCode.toCanvas(document.getElementById("qr"), link, {
-      color: {
-        dark: "#ffffff",
-        light: "#121212"
-      },
-      width: 220
-    });
-
-    document.getElementById("shareBtn").addEventListener("click", async () => {
+    const copyText = async (txt)=>{
       try {
-        await navigator.share({
-          title: "Link to Code",
-          text: `Here's the link for code ${code}`,
-          url: link
-        });
-      } catch (err) {
-        alert("Sharing failed or not supported.");
+        await navigator.clipboard.writeText(txt);
+        toast('Copied!');
+      } catch {
+        // fallback
+        const i = document.createElement('textarea');
+        i.value = txt; document.body.appendChild(i); i.select();
+        try { document.execCommand('copy'); toast('Copied!'); }
+        catch { alert('Copy failed'); }
+        finally { i.remove(); }
       }
+    };
+
+    const sharePayload = async (data, fallbackText)=>{
+      if (navigator.share) {
+        try { await navigator.share(data); return; }
+        catch (e) { /* user cancelled or not supported, fall through */ }
+      }
+      await copyText(fallbackText);
+    };
+
+    // --- buttons ---
+    document.getElementById('copyLinkBtn').addEventListener('click', ()=>copyText(link));
+    document.getElementById('copyCodeBtn').addEventListener('click', ()=>copyText(CODE));
+
+    document.getElementById('shareLinkBtn').addEventListener('click', ()=>{
+      sharePayload(
+        { title: "Short Link", text: `Link for code ${CODE}`, url: link },
+        `${link}`
+      );
     });
+
+    document.getElementById('shareCodeBtn').addEventListener('click', ()=>{
+      sharePayload(
+        { title: "Share Code", text: `Code: ${CODE}` },
+        `Code: ${CODE}`
+      );
+    });
+
+    // (optional) hard block if someone reaches this page directly (not embedded)
+    // if (window.top === window.self) {
+    //   // redirect or minimal UI; you said IP lock already handles access
+    // }
   </script>
 </body>
 </html>
